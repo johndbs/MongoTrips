@@ -1,5 +1,6 @@
 package com.thinkitdevit.mongotrips;
 
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoDatabase;
 import com.thinkitdevit.mongotrips.config.MongoDbConnectionConfig;
 import com.thinkitdevit.mongotrips.mapper.BookingMapper;
@@ -15,11 +16,11 @@ import com.thinkitdevit.mongotrips.services.BookingService;
 import com.thinkitdevit.mongotrips.services.CustomerService;
 import com.thinkitdevit.mongotrips.services.TripService;
 import com.thinkitdevit.mongotrips.services.aggregates.CustomerAggregateService;
-import org.bson.types.ObjectId;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
+@Slf4j
 public class Main {
 
     public static void main(String[] args) {
@@ -33,12 +34,13 @@ public class Main {
         CustomerService customerService = new CustomerService(mongoDatabase, customerMapper);
 
         Mapper<Booking> bookingMapper = new BookingMapper();
-        BookingService bookingService = new BookingService(mongoDatabase, bookingMapper);
+        BookingService bookingService = new BookingService(mongoDatabase, bookingMapper, tripService);
 
         Mapper<CustomerAggregate.BookingAggregate> bookingAggregateMapper = new BookingAggregateMapper();
         CustomerAggregateService customerAggregateService = new CustomerAggregateService(mongoDatabase,
                 customerMapper, bookingAggregateMapper);
 
+        ClientSession clientSession = MongoDbConnectionConfig.getClientSession();
 
         // Create a trip
         Trip tripParis = Trip.builder()
@@ -46,12 +48,12 @@ public class Main {
                 .startDate(LocalDate.of(2024, 6, 1))
                 .endDate(LocalDate.of(2024, 6, 10))
                 .price(2041.99 )
-                .availableSeats(10)
+                .availableSeats(1)
                 .bookedSeats(0)
                 .description("A trip to Paris")
                 .build();
 
-        tripService.createTrip(tripParis);
+        tripService.createTrip(clientSession, tripParis);
 
         Trip tripLondon = Trip.builder()
                 .destination("London")
@@ -63,25 +65,25 @@ public class Main {
                 .description("A trip to London")
                 .build();
 
-        tripService.createTrip(tripLondon);
+        tripService.createTrip(clientSession, tripLondon);
 
         // Read a trip by ID
-        Trip tripById = tripService.getTripById(tripParis.getId());
+        Trip tripById = tripService.getTripById(clientSession, tripParis.getId());
         System.out.println("Trip by ID: " + tripById + " description: "+ tripById.getDescription());
 
         // Update the trip
         tripParis.setDescription("A beautiful trip to Paris");
-        tripService.update(tripParis);
+        tripService.update(clientSession, tripParis);
 
         // Read
-        tripById = tripService.getTripById(tripParis.getId());
+        tripById = tripService.getTripById(clientSession, tripParis.getId());
         System.out.println("Trip by ID: " + tripById + " description: "+ tripById.getDescription());
 
         // Delete the trip
-        tripService.delete(tripLondon.getId());
+        tripService.delete(clientSession, tripLondon.getId());
 
         // Get all trips
-        tripService.getAllTrips().forEach(System.out::println);
+        tripService.getAllTrips(clientSession).forEach(System.out::println);
 
 
 
@@ -100,9 +102,9 @@ public class Main {
                         .build())
                 .build();
 
-        customerService.createCustomer(customerAlice);
+        customerService.createCustomer(clientSession, customerAlice);
 
-        Customer customerFound = customerService.getCustomerById(customerAlice.getId());
+        Customer customerFound = customerService.getCustomerById(clientSession, customerAlice.getId());
 
         System.out.println("Customer by ID: "+customerFound.getId() + " firstName: "+customerFound.getFirstName());
 
@@ -114,50 +116,86 @@ public class Main {
                 .phoneNumber("0123456789")
                 .build();
 
-        customerService.createCustomer(customerBob);
+        customerService.createCustomer(clientSession, customerBob);
 
         // Get customer by ID
-        customerFound = customerService.getCustomerById(customerBob.getId());
+        customerFound = customerService.getCustomerById(clientSession, customerBob.getId());
         System.out.println("Customer by ID: "+customerFound.getId() + " firstName: "+customerFound.getFirstName());
 
         // Delete a customer
-        customerService.delete(customerBob.getId());
-
-        // Get all customer
-        customerService.getAllCustomers().forEach(System.out::println);
+        customerService.delete(clientSession, customerBob.getId());
 
 
-        // Create a booking
-
-        Booking bookingAliceToParis = Booking.builder()
-                .date(LocalDateTime.of(2024, 6, 1, 18, 0))
-                .status(Booking.Status.CONFIRMED)
-                .customerId(customerAlice.getId())
-                .tripId(tripParis.getId())
+        // Create an other customer
+        Customer customerCarl = Customer.builder()
+                .firstName("Carl")
+                .lastName("Iron")
+                .email("carl.iron@test.com")
+                .phoneNumber("0123456789")
                 .build();
 
-        bookingService.createBooking(bookingAliceToParis);
+        customerService.createCustomer(clientSession, customerCarl);
+
+        // Get all customer
+        customerService.getAllCustomers(clientSession).forEach(System.out::println);
+
+
+
+        // Create a first booking with transaction
+
+        Booking createdBooking = null;
+
+
+        try{
+            clientSession.startTransaction();
+
+            createdBooking = bookingService.book(clientSession, tripParis.getId(), customerAlice.getId());
+
+            clientSession.commitTransaction();
+        }catch (Exception e){
+            log.error("Transaction fail : "+e);
+            clientSession.abortTransaction();
+        }
+
 
         // Get booking by ID
-        Booking bookingFound = bookingService.getBookingById(bookingAliceToParis.getId());
+        Booking bookingFound = bookingService.getBookingById(clientSession, createdBooking.getId());
 
         System.out.println("Booking ID: "+bookingFound.getId() + " customerId: "+bookingFound.getCustomerId()+ " tripId: "+ bookingFound.getTripId());
 
 
+        // Create a second booking with transaction
+
+        createdBooking = null;
+
+        try{
+            clientSession.startTransaction();
+
+            createdBooking = bookingService.book(clientSession, tripParis.getId(), customerCarl.getId());
+
+            clientSession.commitTransaction();
+        }catch (Exception e){
+            System.out.println("Transcation fail : "+e);
+            clientSession.abortTransaction();
+        }
+
+
+
         // Get all booking
-        bookingService.getAllBookings().forEach(System.out::println);
+        bookingService.getAllBookings(clientSession).forEach(System.out::println);
 
 
         // Delete a booking
         //bookingService.delete(bookingAliceToParis.getId());
 
 
-        customerAggregateService.getCustomerAggregate(customerAlice.getId())
+        customerAggregateService.getCustomerAggregate(clientSession, customerAlice.getId())
                 .ifPresentOrElse(System.out::println,
                         () -> System.out.println("Booking aggregate not found"));
 
 
 
+        clientSession.close();
 
         // Close the connection
         MongoDbConnectionConfig.closeConnection();

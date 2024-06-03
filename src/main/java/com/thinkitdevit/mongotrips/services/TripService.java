@@ -1,5 +1,6 @@
 package com.thinkitdevit.mongotrips.services;
 
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -20,6 +21,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -41,9 +43,9 @@ public class TripService {
      * Add a new trip to the database
      * @param trip The trip to add
      */
-    public void createTrip(Trip trip) {
+    public void createTrip(ClientSession clientSession, Trip trip) {
         Document doc = tripMapper.modelToDocument(trip);
-        tripCollection.insertOne(doc);
+        tripCollection.insertOne(clientSession, doc);
 
         trip.setId(doc.getObjectId("_id"));
     }
@@ -53,8 +55,8 @@ public class TripService {
      * @param id The ID of the trip
      * @return The trip with the given ID
      */
-    public Trip getTripById(ObjectId id) {
-        Document docFound = tripCollection.find(Filters.eq("_id", id)).first();
+    public Trip getTripById(ClientSession clientSession, ObjectId id) {
+        Document docFound = tripCollection.find(clientSession, Filters.eq("_id", id)).first();
         return tripMapper.documentToModel(docFound);
     }
 
@@ -62,8 +64,8 @@ public class TripService {
      * Get all trips
      * @return All trips
      */
-    public List<Trip> getAllTrips() {
-        FindIterable<Document> documentFindIterable = tripCollection.find();
+    public List<Trip> getAllTrips(ClientSession clientSession) {
+        FindIterable<Document> documentFindIterable = tripCollection.find(clientSession);
 
         return StreamSupport.stream(documentFindIterable.spliterator(), false)
                 .map(tripMapper::documentToModel)
@@ -75,18 +77,18 @@ public class TripService {
      * Update a trip
      * @param trip The trip to update
      */
-    public void update(Trip trip) {
+    public void update(ClientSession clientSession, Trip trip) {
         Bson find = Filters.eq("_id", trip.getId());
         Document update = new Document("$set", tripMapper.modelToDocument(trip));
-        tripCollection.updateOne(find, update);
+        tripCollection.updateOne(clientSession, find, update);
     }
 
     /**
      * Delete a trip
      * @param id The ID of the trip to delete
      */
-    public void delete(ObjectId id) {
-       tripCollection.deleteOne(Filters.eq("_id", id));
+    public void delete(ClientSession clientSession, ObjectId id) {
+       tripCollection.deleteOne(clientSession, Filters.eq("_id", id));
     }
 
     /**

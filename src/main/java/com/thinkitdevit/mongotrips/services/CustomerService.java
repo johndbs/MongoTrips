@@ -1,5 +1,6 @@
 package com.thinkitdevit.mongotrips.services;
 
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
@@ -30,9 +31,9 @@ public class CustomerService {
      * Create a new customer
      * @param customer
      */
-    public void createCustomer(Customer customer) {
+    public void createCustomer(ClientSession clientSession, Customer customer) {
         Document doc = customerMapper.modelToDocument(customer);
-        customerCollection.insertOne(doc);
+        customerCollection.insertOne(clientSession, doc);
 
         customer.setId(doc.getObjectId("_id"));
     }
@@ -42,16 +43,16 @@ public class CustomerService {
      * @param id The ID of the customer
      * @return The customer with the given ID
      */
-    public Customer getCustomerById(ObjectId id) {
-        return customerMapper.documentToModel(customerCollection.find(new Document("_id", id)).first());
+    public Customer getCustomerById(ClientSession clientSession, ObjectId id) {
+        return customerMapper.documentToModel(customerCollection.find(clientSession, new Document("_id", id)).first());
     }
 
     /**
      * Get all customers
      * @return All customers
      */
-    public List<Customer> getAllCustomers() {
-        return StreamSupport.stream(customerCollection.find().spliterator(), false)
+    public List<Customer> getAllCustomers(ClientSession clientSession) {
+        return StreamSupport.stream(customerCollection.find(clientSession).spliterator(), false)
                 .map(customerMapper::documentToModel)
                 .collect(Collectors.toList());
     }
@@ -60,18 +61,18 @@ public class CustomerService {
      * Update a customer
      * @param customer The customer to update
      */
-    public void update(Customer customer) {
+    public void update(ClientSession clientSession, Customer customer) {
         Bson find = Filters.eq(customer.getId());
         Bson update = new Document("$set", customerMapper.modelToDocument(customer));
-        customerCollection.updateOne(find, update);
+        customerCollection.updateOne(clientSession, find, update);
     }
 
     /**
      * Delete a customer
      * @param id The ID of the customer to delete
      */
-    public void delete(ObjectId id) {
-        customerCollection.deleteOne(Filters.eq("_id", id));
+    public void delete(ClientSession clientSession, ObjectId id) {
+        customerCollection.deleteOne(clientSession, Filters.eq("_id", id));
     }
 
 }

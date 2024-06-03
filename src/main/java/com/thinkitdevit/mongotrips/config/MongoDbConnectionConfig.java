@@ -1,5 +1,6 @@
 package com.thinkitdevit.mongotrips.config;
 
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
@@ -25,6 +26,10 @@ public class MongoDbConnectionConfig {
         if(mongoClient != null) {
             mongoClient.close();
         }
+    }
+
+    public static ClientSession getClientSession(){
+        return mongoClient.startSession();
     }
 
 }

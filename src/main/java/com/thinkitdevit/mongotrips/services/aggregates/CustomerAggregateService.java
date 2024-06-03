@@ -1,6 +1,7 @@
 package com.thinkitdevit.mongotrips.services.aggregates;
 
 import com.mongodb.client.AggregateIterable;
+import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
@@ -35,7 +36,7 @@ public class CustomerAggregateService {
     }
 
 
-    public Optional<CustomerAggregate> getCustomerAggregate(ObjectId objectId){
+    public Optional<CustomerAggregate> getCustomerAggregate(ClientSession clientSession, ObjectId objectId){
 
         System.out.println("Search aggregate for customer: "+objectId);
 
@@ -68,7 +69,7 @@ public class CustomerAggregateService {
                 unwindBookings, lookupTrips,
                 unwindBookingsTripDetails, groupTripDetails, projectTripDetails
         );
-        AggregateIterable<Document> aggregateResult = customerCollection.aggregate(pipeline);
+        AggregateIterable<Document> aggregateResult = customerCollection.aggregate(clientSession, pipeline);
 
         Document explainResult = customerCollection.aggregate(pipeline).explain();
         System.out.println(explainResult.toJson());
